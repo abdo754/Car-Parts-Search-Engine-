@@ -1,10 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// https://vitejs.dev/config/
+// https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  // IMPORTANT: Replace 'YOUR_REPOSITORY_NAME' with the actual name of your GitHub repository.
-  // For example, if your repository is named 'car-parts-search-engine', it should be base: '/car-parts-search-engine/'
-  base: '/YOUR_REPOSITORY_NAME/', 
+  // IMPORTANT: This 'base' path must exactly match your GitHub repository name.
+  // Based on your console output (abdo754.github.io/Car-Parts-Search-Engine/),
+  // your repository name is 'Car-Parts-Search-Engine'.
+  base: '/Car-Parts-Search-Engine/',
 });
