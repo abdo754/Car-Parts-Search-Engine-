@@ -1,0 +1,5 @@
+{
+  "name": "Car Parts Search Engine",
+  "description": "A web application for searching car parts, featuring separate interfaces for customers to search for parts and for administrators to manage inventory by uploading Excel files.",
+  "requestFramePermissions": []
+}
