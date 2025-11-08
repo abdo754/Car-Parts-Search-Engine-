@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "homepage": "https://YOUR_USERNAME.github.io/YOUR_REPOSITORY_NAME/",
+  "homepage": "https://abdo754.github./Car-Parts-Search-Engine-/",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
