@@ -3,6 +3,7 @@ import type { CarPart, UploadSummary, Transaction } from '../types';
 
 const DB_KEY = 'car_parts_db';
 const TX_KEY = 'transactions';
+const RECEIPT_KEY = 'receipts';
 
 const getInitialParts = (): CarPart[] => {
   try {
@@ -27,6 +28,9 @@ const getInitialTransactions = (): Transaction[] => {
 export const usePartsDB = () => {
   const [parts, setParts] = useState<CarPart[]>(getInitialParts);
   const [transactions, setTransactions] = useState<Transaction[]>(getInitialTransactions);
+  const [receipts, setReceipts] = useState<any[]>(() => {
+    try { return JSON.parse(window.localStorage.getItem(RECEIPT_KEY) || '[]'); } catch { return []; }
+  });
 
   useEffect(() => {
     try {
@@ -43,6 +47,10 @@ export const usePartsDB = () => {
       console.error('Error writing transactions to localStorage', error);
     }
   }, [transactions]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(RECEIPT_KEY, JSON.stringify(receipts)); } catch { }
+  }, [receipts]);
 
   const addOrUpdateParts = useCallback((newParts: CarPart[], ownerId?: string): UploadSummary => {
     const summary: UploadSummary = {
@@ -118,7 +126,7 @@ export const usePartsDB = () => {
     return transactions;
   }, [transactions]);
 
-  const buyPart = useCallback((partNumber: string, qty: number, buyerId: string) => {
+  const buyPart = useCallback((partNumber: string, qty: number, buyerId: string, receiptId?: string) => {
     const idx = parts.findIndex(p => p.partNumber === partNumber);
     if (idx === -1) throw new Error('Part not found');
     const part = parts[idx];
@@ -138,10 +146,17 @@ export const usePartsDB = () => {
       price: part.price,
       qty,
       date: new Date().toISOString(),
+      receiptId: receiptId,
     };
     setTransactions(prev => [tx, ...prev]);
     return tx;
   }, [parts]);
 
-  return { addOrUpdateParts, searchParts, getAllParts, buyPart, getTransactions, addTransaction };
+  const addReceipt = useCallback((receipt: { id: string; buyerId: string; items: any[]; total: number; date: string }) => {
+    setReceipts(prev => [receipt, ...prev]);
+  }, []);
+
+  const getReceipts = useCallback(() => receipts, [receipts]);
+
+  return { addOrUpdateParts, searchParts, getAllParts, buyPart, getTransactions, addTransaction, addReceipt, getReceipts };
 };

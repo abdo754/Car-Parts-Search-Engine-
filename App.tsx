@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { User, Page } from './types';
 import { Role } from './types';
-import type { Transaction } from './types';
+import type { Transaction, Receipt } from './types';
 import { useCart } from './hooks/useCart';
 import AdminDashboard from './components/AdminDashboard';
 import CustomerDashboard from './components/CustomerDashboard';
 import Button from './components/common/Button';
 import Input from './components/common/Input';
 import { usePartsDB } from './hooks/usePartsDB';
+import ReceiptView from './components/Receipt';
 
 const CarIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
@@ -118,8 +119,10 @@ function App() {
     const [page, setPage] = useState<Page>('login');
     const [authError, setAuthError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const { addOrUpdateParts, searchParts, getAllParts, buyPart, getTransactions } = usePartsDB();
+    const { addOrUpdateParts, searchParts, getAllParts, buyPart, getTransactions, addReceipt, getReceipts } = usePartsDB();
     const cart = useCart(user?.id);
+    const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+    const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
 
     useEffect(() => {
         try {
@@ -192,9 +195,70 @@ function App() {
         return <AuthForm page={page} setPage={setPage} onAuth={handleAuth} authError={authError}/>;
     }
 
+    const showNotification = (type: 'success' | 'error' | 'info', message: string) => {
+        setNotification({ type, message });
+        // auto-dismiss after 4s
+        setTimeout(() => setNotification(null), 4000);
+    };
+
+    const handleCheckoutAtomic = useCallback(() => {
+        const items = cart.items;
+        if (!items || items.length === 0) {
+            showNotification('error', 'Your cart is empty.');
+            return;
+        }
+
+        // Validate all items first
+        const insufficient: string[] = [];
+        const parts = getAllParts();
+        for (const it of items) {
+            const part = parts.find(p => p.partNumber === it.partNumber);
+            if (!part) {
+                insufficient.push(`${it.partNumber} (not found)`);
+                continue;
+            }
+            if ((part.stock || 0) < it.qty) {
+                insufficient.push(`${it.partName} (only ${part.stock} left)`);
+            }
+        }
+
+        if (insufficient.length > 0) {
+            showNotification('error', `Cannot checkout: ${insufficient.join(', ')}`);
+            return;
+        }
+
+        try {
+            const receiptId = `r_${Date.now()}`;
+            const total = cart.getTotal ? cart.getTotal() : items.reduce((s, i) => s + i.price * i.qty, 0);
+            const receipt: Receipt = { id: receiptId, buyerId: user!.id, items: items.map(i => ({ ...i })), total, date: new Date().toISOString() };
+
+            // Persist receipt first
+            addReceipt && addReceipt(receipt);
+
+            // Perform buys (these will record transactions with receiptId)
+            for (const it of items) {
+                buyPart(it.partNumber, it.qty, user!.id, receiptId);
+            }
+
+            cart.clearCart();
+            showNotification('success', 'Purchase successful!');
+            setSelectedReceipt(receipt);
+        } catch (err: any) {
+            console.error('Checkout failed', err);
+            showNotification('error', `Checkout failed: ${err.message || String(err)}`);
+        }
+    }, [cart, getAllParts, addReceipt, buyPart, user]);
+
     return (
         <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
             <Header user={user} onLogout={handleLogout} />
+            {notification && (
+                <div className={`container mx-auto mt-4 px-4 sm:px-6 lg:px-8`}>
+                    <div className={`rounded-md p-3 text-sm ${notification.type === 'success' ? 'bg-green-50 text-green-800' : notification.type === 'error' ? 'bg-red-50 text-red-800' : 'bg-blue-50 text-blue-800'}`}>
+                        {notification.message}
+                    </div>
+                </div>
+            )}
             <main>
                 {user.role === Role.Admin ? (
                     <AdminDashboard username={user.email} onUpload={addOrUpdateParts} isAdmin />
@@ -207,22 +271,12 @@ function App() {
                         if (!part) return;
                         cart.addToCart({ partNumber: part.partNumber, partName: part.partName, ownerId: part.ownerId, price: part.price, qty }, qty);
                     }} cart={cart} onCheckout={() => {
-                        // perform purchase for all cart items
-                        try {
-                            const items = cart.items;
-                            items.forEach(i => {
-                                try {
-                                    const tx = buyPart(i.partNumber, i.qty, user.id);
-                                    console.log('bought', tx);
-                                } catch (e) {
-                                    console.error('failed to buy', i.partNumber, e);
-                                }
-                            });
-                            cart.clearCart();
-                        } catch (e) { console.error(e); }
+                        handleCheckoutAtomic();
                     }} />
                 )}
             </main>
+
+            <ReceiptView receipt={selectedReceipt} onClose={() => setSelectedReceipt(null)} />
         </div>
     );
 }

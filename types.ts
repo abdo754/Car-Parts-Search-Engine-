@@ -32,6 +32,7 @@ export interface Transaction {
   price: number;
   qty: number;
   date: string;
+  receiptId?: string;
 }
 
 export interface CartItem {
@@ -40,6 +41,14 @@ export interface CartItem {
   ownerId?: string;
   price: number;
   qty: number;
+}
+
+export interface Receipt {
+  id: string;
+  buyerId: string;
+  items: CartItem[];
+  total: number;
+  date: string;
 }
 
 export interface UploadSummary {
