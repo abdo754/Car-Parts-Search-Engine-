@@ -5,6 +5,7 @@ import Button from './common/Button';
 interface AdminDashboardProps {
   username: string;
   onUpload: (parts: CarPart[]) => UploadSummary;
+  isAdmin?: boolean;
 }
 
 // Define the type for the XLSX library from the CDN
@@ -17,7 +18,7 @@ const UploadIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 );
 
 
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ username, onUpload }) => {
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ username, onUpload, isAdmin }) => {
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [summary, setSummary] = useState<UploadSummary | null>(null);
@@ -69,6 +70,37 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ username, onUpload }) =
     };
     reader.readAsArrayBuffer(file);
   }, [file, onUpload]);
+
+  // Admin-only helpers
+  const [users, setUsers] = useState<any[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('users') || '[]');
+    } catch { return []; }
+  });
+
+  const [transactions, setTransactions] = useState<any[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('transactions') || '[]');
+    } catch { return []; }
+  });
+
+  const refreshAdminData = () => {
+    try { setUsers(JSON.parse(localStorage.getItem('users') || '[]')); } catch { setUsers([]); }
+    try { setTransactions(JSON.parse(localStorage.getItem('transactions') || '[]')); } catch { setTransactions([]); }
+  };
+
+  const removeUser = (id: string) => {
+    // remove user
+    const nextUsers = (JSON.parse(localStorage.getItem('users') || '[]') as any[]).filter(u => u.id !== id);
+    localStorage.setItem('users', JSON.stringify(nextUsers));
+    // remove parts owned by this user
+    try {
+      const parts = JSON.parse(localStorage.getItem('car_parts_db') || '[]') as any[];
+      const remaining = parts.filter(p => p.ownerId !== id);
+      localStorage.setItem('car_parts_db', JSON.stringify(remaining));
+    } catch (e) { console.error(e); }
+    refreshAdminData();
+  };
 
   return (
     <div className="container mx-auto p-4 md:p-8 max-w-4xl">
@@ -122,6 +154,39 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ username, onUpload }) =
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="mt-8 bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+          <h3 className="text-2xl font-semibold text-gray-800 dark:text-white mb-4">Admin: Users</h3>
+          <div className="max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md mb-4">
+            <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+              {users.map(u => (
+                <li key={u.id} className="p-3 flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-800 dark:text-gray-200">{u.name || u.email} <span className="text-xs text-gray-500">({u.email})</span></p>
+                    <p className="text-xs text-gray-500">{u.role}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="text-sm text-red-600" onClick={() => removeUser(u.id)}>Remove</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <h3 className="text-2xl font-semibold text-gray-800 dark:text-white mb-4">Admin: Transactions</h3>
+          <div className="max-h-60 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md">
+            <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+              {transactions.map((t, i) => (
+                <li key={i} className="p-3">
+                  <p className="font-semibold text-gray-800 dark:text-gray-200">{t.partNumber} — {t.qty} × ${t.price.toFixed?.(2) ?? t.price}</p>
+                  <p className="text-xs text-gray-500">Buyer: {t.buyerId} Owner: {t.ownerId} Date: {new Date(t.date).toLocaleString()}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       )}
     </div>

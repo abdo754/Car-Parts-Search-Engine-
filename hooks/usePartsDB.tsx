@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
-import type { CarPart, UploadSummary } from '../types';
+import type { CarPart, UploadSummary, Transaction } from '../types';
 
 const DB_KEY = 'car_parts_db';
+const TX_KEY = 'transactions';
 
 const getInitialParts = (): CarPart[] => {
   try {
@@ -13,8 +14,19 @@ const getInitialParts = (): CarPart[] => {
   }
 };
 
+const getInitialTransactions = (): Transaction[] => {
+  try {
+    const item = window.localStorage.getItem(TX_KEY);
+    return item ? JSON.parse(item) : [];
+  } catch (error) {
+    console.error('Error reading transactions from localStorage', error);
+    return [];
+  }
+};
+
 export const usePartsDB = () => {
   const [parts, setParts] = useState<CarPart[]>(getInitialParts);
+  const [transactions, setTransactions] = useState<Transaction[]>(getInitialTransactions);
 
   useEffect(() => {
     try {
@@ -24,7 +36,15 @@ export const usePartsDB = () => {
     }
   }, [parts]);
 
-  const addOrUpdateParts = useCallback((newParts: CarPart[]): UploadSummary => {
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(TX_KEY, JSON.stringify(transactions));
+    } catch (error) {
+      console.error('Error writing transactions to localStorage', error);
+    }
+  }, [transactions]);
+
+  const addOrUpdateParts = useCallback((newParts: CarPart[], ownerId?: string): UploadSummary => {
     const summary: UploadSummary = {
       successCount: 0,
       failedCount: 0,
@@ -58,6 +78,7 @@ export const usePartsDB = () => {
         year: cleanYear,
         price: cleanPrice,
         stock: cleanStock,
+        ownerId: ownerId || part.ownerId,
       };
 
       updatedPartsMap.set(validatedPart.partNumber, validatedPart);
@@ -86,5 +107,41 @@ export const usePartsDB = () => {
     return parts;
   }, [parts]);
 
-  return { addOrUpdateParts, searchParts, getAllParts };
+  const addTransaction = useCallback((tx: Transaction) => {
+    setTransactions(prev => {
+      const next = [tx, ...prev];
+      return next;
+    });
+  }, []);
+
+  const getTransactions = useCallback(() => {
+    return transactions;
+  }, [transactions]);
+
+  const buyPart = useCallback((partNumber: string, qty: number, buyerId: string) => {
+    const idx = parts.findIndex(p => p.partNumber === partNumber);
+    if (idx === -1) throw new Error('Part not found');
+    const part = parts[idx];
+    const available = Number(part.stock || 0);
+    if (qty <= 0 || qty > available) throw new Error('Invalid quantity');
+
+    const updatedPart = { ...part, stock: available - qty };
+    const nextParts = [...parts];
+    nextParts[idx] = updatedPart;
+    setParts(nextParts);
+
+    const tx: Transaction = {
+      id: `tx_${Date.now()}`,
+      buyerId,
+      ownerId: part.ownerId,
+      partNumber: part.partNumber,
+      price: part.price,
+      qty,
+      date: new Date().toISOString(),
+    };
+    setTransactions(prev => [tx, ...prev]);
+    return tx;
+  }, [parts]);
+
+  return { addOrUpdateParts, searchParts, getAllParts, buyPart, getTransactions, addTransaction };
 };

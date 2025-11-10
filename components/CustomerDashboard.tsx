@@ -5,6 +5,7 @@ interface CustomerDashboardProps {
   username: string;
   searchParts: (query: string) => CarPart[];
   getAllParts: () => CarPart[];
+  onBuy?: (partNumber: string, qty: number) => void;
 }
 
 const SearchIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -14,7 +15,7 @@ const SearchIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 );
 
 
-const PartCard: React.FC<{ part: CarPart }> = ({ part }) => (
+const PartCard: React.FC<{ part: CarPart, onBuy?: (partNumber: string, qty: number) => void }> = ({ part, onBuy }) => (
   <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden transition-transform duration-200 hover:scale-105">
     <div className="p-6">
       <div className="flex justify-between items-start">
@@ -45,11 +46,20 @@ const PartCard: React.FC<{ part: CarPart }> = ({ part }) => (
         </div>
       </div>
       <p className="mt-4 text-sm text-gray-600 dark:text-gray-300">{part.description}</p>
+      <div className="p-4">
+        <div className="flex justify-end">
+          <button
+            className="bg-indigo-600 text-white px-3 py-1 rounded-md text-sm disabled:opacity-50"
+            disabled={part.stock <= 0}
+            onClick={() => onBuy && onBuy(part.partNumber, 1)}
+          >Buy</button>
+        </div>
+      </div>
     </div>
   </div>
 );
 
-const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ username, searchParts, getAllParts }) => {
+const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ username, searchParts, getAllParts, onBuy }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const allPartsCount = useMemo(() => getAllParts().length, [getAllParts]);
 
@@ -78,7 +88,7 @@ const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ username, searchP
       {filteredParts.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredParts.map(part => (
-            <PartCard key={part.partNumber} part={part} />
+            <PartCard key={part.partNumber} part={part} onBuy={onBuy} />
           ))}
         </div>
       ) : (

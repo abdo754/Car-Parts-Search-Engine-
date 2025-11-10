@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { User, Page } from './types';
 import { Role } from './types';
+import type { Transaction } from './types';
 import AdminDashboard from './components/AdminDashboard';
 import CustomerDashboard from './components/CustomerDashboard';
 import Button from './components/common/Button';
@@ -50,17 +51,20 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
 interface AuthFormProps {
     page: Page;
     setPage: React.Dispatch<React.SetStateAction<Page>>;
-    onAuth: (email: string, pass: string) => void;
+    onAuth: (email: string, pass: string, name?: string, phone?: string, role?: Role) => void;
     authError: string | null;
 }
 
 const AuthForm: React.FC<AuthFormProps> = ({ page, setPage, onAuth, authError }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [signupRole, setSignupRole] = useState<Role>(Role.Customer);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onAuth(email, password);
+        onAuth(email, password, name, phone, signupRole);
     };
 
     const isLoginPage = page === 'login';
@@ -82,6 +86,16 @@ const AuthForm: React.FC<AuthFormProps> = ({ page, setPage, onAuth, authError })
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
                 <div className="bg-white dark:bg-gray-800 py-8 px-4 shadow sm:rounded-lg sm:px-10">
                     <form className="space-y-6" onSubmit={handleSubmit}>
+                        {!isLoginPage && (
+                            <>
+                                <Input id="name" label="Full name" type="text" value={name} onChange={(e) => setName(e.target.value)} required />
+                                <Input id="phone" label="Phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+                                <div className="flex gap-4 items-center">
+                                  <label className="flex items-center gap-2"><input type="radio" checked={signupRole===Role.Customer} onChange={() => setSignupRole(Role.Customer)} /> Customer</label>
+                                  <label className="flex items-center gap-2"><input type="radio" checked={signupRole===Role.StoreOwner} onChange={() => setSignupRole(Role.StoreOwner)} /> Store owner</label>
+                                </div>
+                            </>
+                        )}
                         <Input id="email" label="Email address" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email"/>
                         <Input id="password" label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete={isLoginPage ? "current-password" : "new-password"}/>
                         
@@ -103,7 +117,7 @@ function App() {
     const [page, setPage] = useState<Page>('login');
     const [authError, setAuthError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const { addOrUpdateParts, searchParts, getAllParts } = usePartsDB();
+    const { addOrUpdateParts, searchParts, getAllParts, buyPart, getTransactions } = usePartsDB();
 
     useEffect(() => {
         try {
@@ -126,40 +140,39 @@ function App() {
             setUser(adminUser);
             return;
         }
-
-        const customers: User[] = JSON.parse(localStorage.getItem('customers') || '[]');
-        const customer = customers.find(c => c.email === email);
+        const users: User[] = JSON.parse(localStorage.getItem('users') || '[]');
+        const found = users.find(u => u.email === email);
         // In a real app, passwords would be hashed. For this demo, we check plaintext.
-        if (customer && localStorage.getItem(`pass_${email}`) === pass) {
-            localStorage.setItem('user', JSON.stringify(customer));
-            setUser(customer);
+        if (found && localStorage.getItem(`pass_${email}`) === pass) {
+            localStorage.setItem('user', JSON.stringify(found));
+            setUser(found);
         } else {
             setAuthError('Invalid email or password.');
         }
     }, []);
 
-    const handleSignup = useCallback((email: string, pass: string) => {
+    const handleSignup = useCallback((email: string, pass: string, name?: string, phone?: string, role?: Role) => {
         setAuthError(null);
-        const customers: User[] = JSON.parse(localStorage.getItem('customers') || '[]');
-        if (customers.some(c => c.email === email) || email.toLowerCase() === 'admin@example.com') {
+        const users: User[] = JSON.parse(localStorage.getItem('users') || '[]');
+        if (users.some(c => c.email === email) || email.toLowerCase() === 'admin@example.com') {
             setAuthError('An account with this email already exists.');
             return;
         }
 
-        const newCustomer: User = { id: `cust_${Date.now()}`, email, role: Role.Customer };
-        customers.push(newCustomer);
-        localStorage.setItem('customers', JSON.stringify(customers));
+        const newUser: User = { id: `u_${Date.now()}`, email, role: role || Role.Customer, name, phone };
+        users.push(newUser);
+        localStorage.setItem('users', JSON.stringify(users));
         localStorage.setItem(`pass_${email}`, pass); // Storing pass in LS is insecure, for demo only.
         
-        localStorage.setItem('user', JSON.stringify(newCustomer));
-        setUser(newCustomer);
+        localStorage.setItem('user', JSON.stringify(newUser));
+        setUser(newUser);
     }, []);
     
-    const handleAuth = (email: string, pass: string) => {
+    const handleAuth = (email: string, pass: string, name?: string, phone?: string, role?: Role) => {
         if (page === 'login') {
             handleLogin(email, pass);
         } else {
-            handleSignup(email, pass);
+            handleSignup(email, pass, name, phone, role);
         }
     }
 
@@ -182,9 +195,19 @@ function App() {
             <Header user={user} onLogout={handleLogout} />
             <main>
                 {user.role === Role.Admin ? (
-                    <AdminDashboard username={user.email} onUpload={addOrUpdateParts} />
+                    <AdminDashboard username={user.email} onUpload={addOrUpdateParts} isAdmin />
+                ) : user.role === Role.StoreOwner ? (
+                    <AdminDashboard username={user.email} onUpload={(parts) => addOrUpdateParts(parts, user.id)} />
                 ) : (
-                    <CustomerDashboard username={user.email} searchParts={searchParts} getAllParts={getAllParts}/>
+                    <CustomerDashboard username={user.email} searchParts={searchParts} getAllParts={getAllParts} onBuy={(partNumber, qty) => {
+                        try {
+                            const tx = buyPart(partNumber, qty, user.id);
+                            // optional: show toast or console
+                            console.log('Purchase recorded', tx);
+                        } catch (err) {
+                            console.error('Purchase failed', err);
+                        }
+                    }} />
                 )}
             </main>
         </div>
