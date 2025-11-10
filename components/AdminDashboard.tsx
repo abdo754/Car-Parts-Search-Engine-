@@ -1,6 +1,8 @@
-import React, { useState, useCallback } from 'react';
-import type { CarPart, UploadSummary } from '../types';
+import React, { useState, useCallback, useEffect } from 'react';
+import type { CarPart, UploadSummary, Receipt } from '../types';
 import Button from './common/Button';
+import { usePartsDB } from '../hooks/usePartsDB';
+import ReceiptView from './Receipt';
 
 interface AdminDashboardProps {
   username: string;
@@ -84,9 +86,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ username, onUpload, isA
     } catch { return []; }
   });
 
+  const { getReceipts } = usePartsDB();
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
+
+  useEffect(() => {
+    try {
+      const fetched = getReceipts ? getReceipts() : JSON.parse(localStorage.getItem('receipts') || '[]');
+      setReceipts(fetched || []);
+    } catch (e) {
+      setReceipts([]);
+    }
+  }, [getReceipts]);
+
   const refreshAdminData = () => {
     try { setUsers(JSON.parse(localStorage.getItem('users') || '[]')); } catch { setUsers([]); }
     try { setTransactions(JSON.parse(localStorage.getItem('transactions') || '[]')); } catch { setTransactions([]); }
+    try { setReceipts(JSON.parse(localStorage.getItem('receipts') || '[]')); } catch { setReceipts([]); }
   };
 
   const removeUser = (id: string) => {
@@ -189,6 +205,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ username, onUpload, isA
           </div>
         </div>
       )}
+      {/* Owner-facing receipts: if not admin, show receipts related to current owner */}
+      {!isAdmin && (
+        <div className="mt-8 bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
+          <h3 className="text-2xl font-semibold text-gray-800 dark:text-white mb-4">Your Sales / Receipts</h3>
+          {receipts.length === 0 ? (
+            <p className="text-sm text-gray-500">No receipts yet.</p>
+          ) : (
+            <div className="max-h-72 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md">
+              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                {(() => {
+                  const current = (() => { try { return JSON.parse(localStorage.getItem('user') || 'null'); } catch { return null; } })();
+                  const ownerId = current?.id;
+                  const filtered = receipts.filter(r => r.items.some(it => it.ownerId === ownerId));
+                  return filtered.length === 0 ? (
+                    <li className="p-3"><p className="text-sm text-gray-500">No sales found for your account.</p></li>
+                  ) : filtered.map(r => (
+                    <li key={r.id} className="p-3 flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-gray-800 dark:text-gray-200">Receipt {r.id}</p>
+                        <p className="text-xs text-gray-500">Date: {new Date(r.date).toLocaleString()} — Total: ${r.total.toFixed(2)}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button className="text-sm text-indigo-600" onClick={() => setSelectedReceipt(r)}>View</button>
+                      </div>
+                    </li>
+                  ));
+                })()}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {selectedReceipt && <ReceiptView receipt={selectedReceipt} onClose={() => setSelectedReceipt(null)} />}
     </div>
   );
 };
