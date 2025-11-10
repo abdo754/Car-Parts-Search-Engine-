@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import type { User, Page } from './types';
 import { Role } from './types';
 import type { Transaction } from './types';
+import { useCart } from './hooks/useCart';
 import AdminDashboard from './components/AdminDashboard';
 import CustomerDashboard from './components/CustomerDashboard';
 import Button from './components/common/Button';
@@ -118,6 +119,7 @@ function App() {
     const [authError, setAuthError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const { addOrUpdateParts, searchParts, getAllParts, buyPart, getTransactions } = usePartsDB();
+    const cart = useCart(user?.id);
 
     useEffect(() => {
         try {
@@ -199,14 +201,25 @@ function App() {
                 ) : user.role === Role.StoreOwner ? (
                     <AdminDashboard username={user.email} onUpload={(parts) => addOrUpdateParts(parts, user.id)} />
                 ) : (
-                    <CustomerDashboard username={user.email} searchParts={searchParts} getAllParts={getAllParts} onBuy={(partNumber, qty) => {
+                    <CustomerDashboard username={user.email} searchParts={searchParts} getAllParts={getAllParts} onAddToCart={(partNumber, qty) => {
+                        // lookup part details to add to cart
+                        const part = getAllParts().find(p => p.partNumber === partNumber);
+                        if (!part) return;
+                        cart.addToCart({ partNumber: part.partNumber, partName: part.partName, ownerId: part.ownerId, price: part.price, qty }, qty);
+                    }} cart={cart} onCheckout={() => {
+                        // perform purchase for all cart items
                         try {
-                            const tx = buyPart(partNumber, qty, user.id);
-                            // optional: show toast or console
-                            console.log('Purchase recorded', tx);
-                        } catch (err) {
-                            console.error('Purchase failed', err);
-                        }
+                            const items = cart.items;
+                            items.forEach(i => {
+                                try {
+                                    const tx = buyPart(i.partNumber, i.qty, user.id);
+                                    console.log('bought', tx);
+                                } catch (e) {
+                                    console.error('failed to buy', i.partNumber, e);
+                                }
+                            });
+                            cart.clearCart();
+                        } catch (e) { console.error(e); }
                     }} />
                 )}
             </main>

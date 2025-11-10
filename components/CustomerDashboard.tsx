@@ -5,7 +5,16 @@ interface CustomerDashboardProps {
   username: string;
   searchParts: (query: string) => CarPart[];
   getAllParts: () => CarPart[];
-  onBuy?: (partNumber: string, qty: number) => void;
+  onAddToCart?: (partNumber: string, qty: number) => void;
+  cart?: {
+    items: { partNumber: string; partName: string; ownerId?: string; price: number; qty: number }[];
+    addToCart?: (item: any, qty?: number) => void;
+    updateQty?: (partNumber: string, qty: number) => void;
+    removeFromCart?: (partNumber: string) => void;
+    clearCart?: () => void;
+    getTotal?: () => number;
+  };
+  onCheckout?: () => void;
 }
 
 const SearchIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -15,7 +24,7 @@ const SearchIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 );
 
 
-const PartCard: React.FC<{ part: CarPart, onBuy?: (partNumber: string, qty: number) => void }> = ({ part, onBuy }) => (
+const PartCard: React.FC<{ part: CarPart, onAddToCart?: (partNumber: string, qty: number) => void }> = ({ part, onAddToCart }) => (
   <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden transition-transform duration-200 hover:scale-105">
     <div className="p-6">
       <div className="flex justify-between items-start">
@@ -51,7 +60,7 @@ const PartCard: React.FC<{ part: CarPart, onBuy?: (partNumber: string, qty: numb
           <button
             className="bg-indigo-600 text-white px-3 py-1 rounded-md text-sm disabled:opacity-50"
             disabled={part.stock <= 0}
-            onClick={() => onBuy && onBuy(part.partNumber, 1)}
+            onClick={() => onAddToCart && onAddToCart(part.partNumber, 1)}
           >Buy</button>
         </div>
       </div>
@@ -59,7 +68,7 @@ const PartCard: React.FC<{ part: CarPart, onBuy?: (partNumber: string, qty: numb
   </div>
 );
 
-const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ username, searchParts, getAllParts, onBuy }) => {
+const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ username, searchParts, getAllParts, onAddToCart, cart, onCheckout }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const allPartsCount = useMemo(() => getAllParts().length, [getAllParts]);
 
@@ -85,10 +94,43 @@ const CustomerDashboard: React.FC<CustomerDashboardProps> = ({ username, searchP
         />
       </div>
 
+      {cart && (
+        <div className="mb-6 bg-white dark:bg-gray-800 p-4 rounded-md shadow">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Your Basket</h3>
+          {cart.items.length === 0 ? (
+            <p className="text-sm text-gray-500">Your basket is empty.</p>
+          ) : (
+            <div className="mt-3">
+              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                {cart.items.map(item => (
+                  <li key={item.partNumber} className="py-2 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">{item.partName}</p>
+                      <p className="text-xs text-gray-500">{item.partNumber} — ${item.price.toFixed(2)}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="w-16 px-2 py-1 border rounded" type="number" min={1} value={item.qty} onChange={(e) => cart.updateQty && cart.updateQty(item.partNumber, Number(e.target.value))} />
+                      <button className="text-sm text-red-600" onClick={() => cart.removeFromCart && cart.removeFromCart(item.partNumber)}>Remove</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-3 flex items-center justify-between">
+                <div className="text-lg font-semibold">Total: ${cart.getTotal ? cart.getTotal().toFixed(2) : '0.00'}</div>
+                <div>
+                  <button className="bg-green-600 text-white px-4 py-2 rounded" onClick={() => onCheckout && onCheckout()}>Checkout</button>
+                  <button className="ml-2 text-sm text-gray-600" onClick={() => cart.clearCart && cart.clearCart()}>Clear</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {filteredParts.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredParts.map(part => (
-            <PartCard key={part.partNumber} part={part} onBuy={onBuy} />
+            <PartCard key={part.partNumber} part={part} onAddToCart={onAddToCart} />
           ))}
         </div>
       ) : (

@@ -34,6 +34,14 @@ export interface Transaction {
   date: string;
 }
 
+export interface CartItem {
+  partNumber: string;
+  partName: string;
+  ownerId?: string;
+  price: number;
+  qty: number;
+}
+
 export interface UploadSummary {
   successCount: number;
   failedCount: number;
